@@ -3,15 +3,19 @@ import "./App.css";
 
 import { useEffect, useState } from "react";
 
-import API from "./api";
+import API, { getProductImageUrl } from "./api";
 
+import AdminPanel from "./components/AdminPanel";
 import LoginPage from "./components/LoginPage";
 import RegisterPage from "./components/RegisterPage";
+import ThemeToggle from "./components/ThemeToggle";
 
 import CheckoutPage from "./components/CheckoutPage";
 import OrderSuccessPage from "./components/OrderSuccessPage";
 import OrdersPage from "./components/OrdersPage";
 import ProfilePage from "./components/ProfilePage";
+import WishlistPage from "./components/WishlistPage";
+import ProductImageGallery from "./components/ProductImageGallery";
 
 function App() {
   // =====================================================
@@ -81,6 +85,20 @@ function App() {
 
   const [products, setProducts] = useState([]);
 
+  const [wishlistItems, setWishlistItems] = useState([]);
+  const [wishlistLoading, setWishlistLoading] = useState(false);
+  const [wishlistError, setWishlistError] = useState("");
+
+  const [categories, setCategories] = useState([]);
+
+  const [deals, setDeals] = useState([]);
+
+  const [selectedCategory, setSelectedCategory] = useState("All Categories");
+
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const [showDealsOnly, setShowDealsOnly] = useState(false);
+
   const [cartItems, setCartItems] = useState([]);
 
   const [loading, setLoading] = useState(true);
@@ -91,9 +109,35 @@ function App() {
 
   const [showCart, setShowCart] = useState(false);
 
+  const [quickViewProduct, setQuickViewProduct] = useState(null);
+  const [quickViewQuantity, setQuickViewQuantity] = useState(1);
+  const [quickViewAdding, setQuickViewAdding] = useState(false);
+
   const [page, setPage] = useState("home");
 
   const [orderData, setOrderData] = useState(null);
+
+  // =====================================================
+  // THEME STATE
+  // =====================================================
+
+  const [theme, setTheme] = useState(
+    localStorage.getItem("theme") || "dark"
+  );
+
+  // Apply theme to document
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("theme", theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(theme === "dark" ? "light" : "dark");
+  };
+
+  const isAdmin = String(user?.role || "")
+    .replace(/^ROLE_/i, "")
+    .toUpperCase() === "ADMIN";
 
   // =====================================================
   // FORMAT PRICE
@@ -108,11 +152,7 @@ function App() {
   // =====================================================
 
   const getImageUrl = (image) => {
-    if (!image) {
-      return null;
-    }
-
-    return `http://localhost:8080/images/${image}`;
+    return getProductImageUrl(image);
   };
 
   // =====================================================
@@ -175,7 +215,10 @@ function App() {
 
     setIsLoggedIn(true);
 
-    setPage("home");
+    const isAdminLogin = String(loginData.role || "")
+      .replace(/^ROLE_/i, "")
+      .toUpperCase() === "ADMIN";
+    setPage(isAdminLogin ? "admin" : "home");
 
     setAuthPage("login");
 
@@ -289,6 +332,45 @@ function App() {
     }
   };
 
+  const fetchWishlist = async () => {
+    if (!userId) {
+      setWishlistItems([]);
+      return;
+    }
+
+    try {
+      setWishlistLoading(true);
+      setWishlistError("");
+      const response = await API.get(`/wishlist/${userId}`);
+      setWishlistItems(Array.isArray(response.data) ? response.data : []);
+    } catch (requestError) {
+      console.error("Wishlist API Error:", requestError);
+      setWishlistError(requestError.response?.data?.message || "Could not load your wishlist.");
+    } finally {
+      setWishlistLoading(false);
+    }
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const response = await API.get("/categories");
+      setCategories(Array.isArray(response.data) ? response.data : []);
+    } catch (requestError) {
+      console.error("Categories API Error:", requestError);
+      setCategories([]);
+    }
+  };
+
+  const fetchDeals = async () => {
+    try {
+      const response = await API.get("/deals");
+      setDeals(Array.isArray(response.data) ? response.data : []);
+    } catch (requestError) {
+      console.error("Deals API Error:", requestError);
+      setDeals([]);
+    }
+  };
+
   // =====================================================
   // FETCH CART
   // =====================================================
@@ -350,6 +432,9 @@ function App() {
         await fetchUser();
         await fetchProducts();
         await fetchCart();
+        await fetchWishlist();
+        await fetchCategories();
+        await fetchDeals();
       } catch (err) {
         if (!cancelled) {
           console.error(
@@ -393,24 +478,50 @@ function App() {
     setShowCart(false);
   };
 
+  const openProductQuickView = (product) => {
+    setQuickViewProduct(product);
+    setQuickViewQuantity(1);
+  };
+
+  const closeProductQuickView = () => {
+    setQuickViewProduct(null);
+    setQuickViewAdding(false);
+  };
+
+  useEffect(() => {
+    if (!quickViewProduct) {
+      return undefined;
+    }
+
+    const handleQuickViewKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setQuickViewProduct(null);
+        setQuickViewAdding(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleQuickViewKeyDown);
+    return () => window.removeEventListener("keydown", handleQuickViewKeyDown);
+  }, [quickViewProduct]);
+
   // =====================================================
   // ADD TO CART
   // =====================================================
 
-  const addToCart = async (product) => {
+  const addToCart = async (product, quantity = 1) => {
     if (!userId) {
       alert(
         "Please login first."
       );
 
-      return;
+      return false;
     }
 
     try {
       const cartData = {
         userId: userId,
         productId: product.id,
-        quantity: 1,
+        quantity: Number(quantity),
       };
 
       console.log(
@@ -433,6 +544,7 @@ function App() {
       alert(
         `${product.name} added to cart successfully!`
       );
+      return true;
     } catch (err) {
       console.error(
         "Add to Cart Error:",
@@ -461,6 +573,53 @@ function App() {
           "Unable to connect to backend."
         );
       }
+      return false;
+    }
+  };
+
+  const addQuickViewProductToCart = async () => {
+    if (!quickViewProduct || quickViewAdding) {
+      return;
+    }
+
+    setQuickViewAdding(true);
+    const added = await addToCart(quickViewProduct, quickViewQuantity);
+    if (added) {
+      closeProductQuickView();
+    } else {
+      setQuickViewAdding(false);
+    }
+  };
+
+  const toggleWishlist = async (product) => {
+    if (!userId) {
+      setAuthPage("login");
+      setIsLoggedIn(false);
+      return;
+    }
+
+    const alreadySaved = wishlistItems.some((item) => item.productId === product.id);
+    try {
+      if (alreadySaved) {
+        await API.delete(`/wishlist/${userId}/${product.id}`);
+      } else {
+        await API.post(`/wishlist/${userId}/${product.id}`);
+      }
+      await fetchWishlist();
+    } catch (requestError) {
+      console.error("Wishlist update failed:", requestError);
+      alert(requestError.response?.data?.message || "Could not update your wishlist.");
+    }
+  };
+
+  const moveWishlistProductToCart = async (productId) => {
+    try {
+      await API.post(`/wishlist/${userId}/${productId}/cart`);
+      await Promise.all([fetchWishlist(), fetchCart()]);
+      alert("Product moved to your cart.");
+    } catch (requestError) {
+      console.error("Move wishlist product to cart failed:", requestError);
+      alert(requestError.response?.data?.message || "Could not move this product to your cart.");
     }
   };
 
@@ -608,6 +767,61 @@ function App() {
       0
     );
 
+  const categoriesForNavigation = categories.length > 0
+    ? categories
+    : [...new Set(products.map((product) => product.category).filter(Boolean))]
+        .sort((left, right) => left.localeCompare(right))
+        .map((name) => ({ id: name, name, parentId: null }));
+
+  const dealsByProductId = new Map(deals.map((deal) => [deal.productId, deal]));
+  const quickViewDeal = quickViewProduct
+    ? dealsByProductId.get(quickViewProduct.id)
+    : null;
+  const quickViewImages = quickViewProduct
+    ? [...new Set([
+        quickViewProduct.image,
+        ...(Array.isArray(quickViewProduct.images) ? quickViewProduct.images : []),
+      ]
+        .filter((image) => typeof image === "string" && image.trim())
+        .map((image) => getImageUrl(image.trim())))]
+    : [];
+  const quickViewStock = quickViewProduct
+    ? Number(quickViewProduct.quantity)
+    : Number.NaN;
+  const wishlistProductIds = new Set(wishlistItems.map((item) => item.productId));
+  const filteredProducts = products.filter((product) => {
+    const query = searchTerm.trim().toLocaleLowerCase();
+    const matchesCategory = selectedCategory === "All Categories"
+      || String(product.category || "").toLocaleLowerCase() === selectedCategory.toLocaleLowerCase();
+    const matchesSearch = !query
+      || `${product.name || ""} ${product.description || ""} ${product.category || ""}`
+        .toLocaleLowerCase()
+        .includes(query);
+    const matchesDeals = !showDealsOnly || dealsByProductId.has(product.id);
+    return matchesCategory && matchesSearch && matchesDeals;
+  });
+
+  const scrollToProducts = () => {
+    document.querySelector(".main-content")?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  const selectCategory = (categoryName) => {
+    setSelectedCategory(categoryName);
+    setShowDealsOnly(false);
+    scrollToProducts();
+  };
+
+  const showWishlist = () => {
+    setPage("wishlist");
+    fetchWishlist();
+  };
+
+  const showDeals = () => {
+    setSelectedCategory("All Categories");
+    setShowDealsOnly(true);
+    scrollToProducts();
+  };
+
   // =====================================================
   // CLEAR CART AFTER ORDER
   // =====================================================
@@ -739,6 +953,8 @@ function App() {
     setUserId(null);
 
     setCartItems([]);
+    setWishlistItems([]);
+    setWishlistError("");
 
     setOrderData(null);
 
@@ -768,19 +984,13 @@ function App() {
       authPage === "register"
     ) {
       return (
-        <RegisterPage
-          onRegisterSuccess={
-            handleRegisterSuccess
-          }
-
-          onLogin={() => {
-            console.log(
-              "Back to Sign In clicked"
-            );
-
-            setAuthPage("login");
-          }}
-        />
+        <>
+          <ThemeToggle theme={theme} onToggle={toggleTheme} className="theme-toggle-float" />
+          <RegisterPage
+            onRegisterSuccess={handleRegisterSuccess}
+            onLogin={() => setAuthPage("login")}
+          />
+        </>
       );
     }
 
@@ -789,21 +999,42 @@ function App() {
     // ---------------------------------------------------
 
     return (
-      <LoginPage
-        onLoginSuccess={
-          handleLoginSuccess
-        }
+      <>
+        <ThemeToggle theme={theme} onToggle={toggleTheme} className="theme-toggle-float" />
+        <LoginPage
+          onLoginSuccess={handleLoginSuccess}
+          onRegister={() => setAuthPage("register")}
+        />
+      </>
+    );
+  }
 
-        onRegister={() => {
-          console.log(
-            "Create account clicked"
-          );
-
-          setAuthPage(
-            "register"
-          );
-        }}
+  if (isAdmin) {
+    return (
+      <AdminPanel
+        user={user}
+        onLogout={handleLogout}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
+    );
+  }
+
+  if (page === "wishlist") {
+    return (
+      <>
+        <ThemeToggle theme={theme} onToggle={toggleTheme} className="theme-toggle-float" />
+        <WishlistPage
+          items={wishlistItems}
+          loading={wishlistLoading}
+          error={wishlistError}
+          formatPrice={formatPrice}
+          getImageUrl={getProductImageUrl}
+          onBack={() => setPage("home")}
+          onRemove={(productId) => toggleWishlist({ id: productId })}
+          onMoveToCart={moveWishlistProductToCart}
+        />
+      </>
     );
   }
 
@@ -815,26 +1046,17 @@ function App() {
     page === "profile"
   ) {
     return (
-      <ProfilePage
-        user={user}
-        userId={userId}
-
-        onBack={() => {
-          setPage("home");
-        }}
-
-        onOrders={() => {
-          setPage("orders");
-        }}
-
-        onContinueShopping={() => {
-          setPage("home");
-        }}
-
-        onLogout={
-          handleLogout
-        }
-      />
+      <>
+        <ThemeToggle theme={theme} onToggle={toggleTheme} className="theme-toggle-float" />
+        <ProfilePage
+          user={user}
+          userId={userId}
+          onBack={() => setPage("home")}
+          onOrders={() => setPage("orders")}
+          onContinueShopping={() => setPage("home")}
+          onLogout={handleLogout}
+        />
+      </>
     );
   }
 
@@ -846,16 +1068,10 @@ function App() {
     page === "orders"
   ) {
     return (
-      <OrdersPage
-        userId={userId}
-        formatPrice={
-          formatPrice
-        }
-
-        onBack={() => {
-          setPage("home");
-        }}
-      />
+      <>
+        <ThemeToggle theme={theme} onToggle={toggleTheme} className="theme-toggle-float" />
+        <OrdersPage userId={userId} formatPrice={formatPrice} onBack={() => setPage("home")} />
+      </>
     );
   }
 
@@ -867,39 +1083,23 @@ function App() {
     page === "checkout"
   ) {
     return (
-      <CheckoutPage
-        cartItems={
-          cartItems
-        }
-
-        products={
-          products
-        }
-
-        subtotal={
-          subtotal
-        }
-
-        userId={
-          userId
-        }
-
-        formatPrice={
-          formatPrice
-        }
-
-        getImageUrl={
-          getImageUrl
-        }
-
-        onBack={() => {
-          setPage("home");
-        }}
-
-        onOrderSuccess={
-          handleOrderSuccess
-        }
-      />
+      <>
+        <ThemeToggle theme={theme} onToggle={toggleTheme} className="theme-toggle-float" />
+        <CheckoutPage
+          cartItems={cartItems}
+          products={products}
+          subtotal={subtotal}
+          userId={userId}
+          formatPrice={formatPrice}
+          getImageUrl={getImageUrl}
+          onBackToCart={async () => {
+            setPage("home");
+            setShowCart(true);
+            await fetchCart();
+          }}
+          onOrderSuccess={handleOrderSuccess}
+        />
+      </>
     );
   }
 
@@ -911,23 +1111,18 @@ function App() {
     page === "success"
   ) {
     return (
-      <OrderSuccessPage
-        order={
-          orderData
-        }
-
-        formatPrice={
-          formatPrice
-        }
-
-        onContinueShopping={() => {
-          setPage("home");
-
-          fetchProducts();
-
-          fetchCart();
-        }}
-      />
+      <>
+        <ThemeToggle theme={theme} onToggle={toggleTheme} className="theme-toggle-float" />
+        <OrderSuccessPage
+          order={orderData}
+          formatPrice={formatPrice}
+          onContinueShopping={() => {
+            setPage("home");
+            fetchProducts();
+            fetchCart();
+          }}
+        />
+      </>
     );
   }
 
@@ -1011,9 +1206,14 @@ function App() {
           <input
             type="text"
             placeholder="Search for products, brands and more..."
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") scrollToProducts();
+            }}
           />
 
-          <button type="button">
+          <button type="button" onClick={scrollToProducts}>
             Search
           </button>
 
@@ -1028,14 +1228,17 @@ function App() {
           <button
             type="button"
             className="nav-action"
+            onClick={showWishlist}
+            aria-pressed={page === "wishlist"}
+            title="Show your saved products"
           >
 
             <span className="nav-icon">
-              ♡
+              {wishlistItems.length > 0 ? "♥" : "♡"}
             </span>
 
             <small>
-              Wishlist
+              Wishlist {wishlistItems.length > 0 ? `(${wishlistItems.length})` : ""}
             </small>
 
           </button>
@@ -1085,6 +1288,18 @@ function App() {
 
           </button>
 
+          {isAdmin && (
+            <button
+              type="button"
+              className="nav-action"
+              onClick={() => setPage("admin")}
+              title="Open admin workspace"
+            >
+              <span className="nav-icon" aria-hidden="true">▦</span>
+              <small>Admin</small>
+            </button>
+          )}
+
           {/* CART */}
 
           <button
@@ -1106,6 +1321,27 @@ function App() {
 
             <small>
               Cart
+            </small>
+
+          </button>
+
+          {/* THEME TOGGLE */}
+
+          <button
+            type="button"
+            className="nav-action"
+
+            onClick={toggleTheme}
+
+            title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+          >
+
+            <span className="nav-icon">
+              {theme === "dark" ? "🌙" : "☀️"}
+            </span>
+
+            <small>
+              {theme === "dark" ? "Dark" : "Light"}
             </small>
 
           </button>
@@ -1142,39 +1378,31 @@ function App() {
       ================================================= */}
 
       <nav className="category-nav">
-
-        <div className="category-item active">
+        <button
+          type="button"
+          className={`category-item ${selectedCategory === "All Categories" ? "active" : ""}`}
+          onClick={() => selectCategory("All Categories")}
+        >
           All Categories
-        </div>
-
-        <div className="category-item">
-          Electronics
-        </div>
-
-        <div className="category-item">
-          Mobiles
-        </div>
-
-        <div className="category-item">
-          Laptops
-        </div>
-
-        <div className="category-item">
-          Fashion
-        </div>
-
-        <div className="category-item">
-          Home & Living
-        </div>
-
-        <div className="category-item">
-          Accessories
-        </div>
-
-        <div className="category-item sale">
-          🔥 Deals
-        </div>
-
+        </button>
+        {categoriesForNavigation.map((category) => (
+          <button
+            type="button"
+            key={category.id ?? category.name}
+            className={`category-item ${selectedCategory === category.name ? "active" : ""}`}
+            onClick={() => selectCategory(category.name)}
+            title={category.description || category.name}
+          >
+            {category.parentId ? "↳ " : ""}{category.name}
+          </button>
+        ))}
+        <button
+          type="button"
+          className={`category-item sale ${showDealsOnly ? "active" : ""}`}
+          onClick={showDeals}
+        >
+          Deals
+        </button>
       </nav>
 
       {/* =================================================
@@ -1248,26 +1476,6 @@ function App() {
 
             <div>
               <strong>
-                10K+
-              </strong>
-
-              <span>
-                Products
-              </span>
-            </div>
-
-            <div>
-              <strong>
-                50K+
-              </strong>
-
-              <span>
-                Happy Customers
-              </span>
-            </div>
-
-            <div>
-              <strong>
                 4.9/5
               </strong>
 
@@ -1287,16 +1495,16 @@ function App() {
           <div className="floating-card card-one">
 
             <span>
-              ⚡
+              ✨
             </span>
 
             <div>
               <strong>
-                Flash Deals
+                Fresh Finds
               </strong>
 
               <small>
-                Up to 40% OFF
+                Discover something you love
               </small>
             </div>
 
@@ -1507,11 +1715,11 @@ function App() {
 
         {!loading &&
           !error &&
-          products.length > 0 && (
+          filteredProducts.length > 0 && (
 
             <div className="product-grid">
 
-              {products.map(
+              {filteredProducts.map(
                 (product) => (
 
                   <div
@@ -1522,19 +1730,29 @@ function App() {
                     <div className="product-top">
 
                       <span className="discount">
-                        SALE
+                        {dealsByProductId.has(product.id)
+                          ? `${Number(dealsByProductId.get(product.id).discountPercent).toFixed(0)}% OFF`
+                          : `${product.quantity} in stock`}
                       </span>
 
                       <button
                         type="button"
-                        className="heart"
+                        className={`heart ${wishlistProductIds.has(product.id) ? "saved" : ""}`}
+                        onClick={() => toggleWishlist(product)}
+                        aria-label={wishlistProductIds.has(product.id) ? "Remove from wishlist" : "Add to wishlist"}
+                        aria-pressed={wishlistProductIds.has(product.id)}
                       >
-                        ♡
+                        {wishlistProductIds.has(product.id) ? "♥" : "♡"}
                       </button>
 
                     </div>
 
-                    <div className="product-image">
+                    <button
+                      type="button"
+                      className="product-image product-quick-view-trigger"
+                      onClick={() => openProductQuickView(product)}
+                      aria-label={`View ${product.name} details`}
+                    >
 
                       <div className="image-glow"></div>
 
@@ -1562,7 +1780,7 @@ function App() {
 
                       )}
 
-                    </div>
+                    </button>
 
                     <div className="product-details">
 
@@ -1571,7 +1789,13 @@ function App() {
                       </span>
 
                       <h3>
-                        {product.name}
+                        <button
+                          type="button"
+                          className="product-name-trigger"
+                          onClick={() => openProductQuickView(product)}
+                        >
+                          {product.name}
+                        </button>
                       </h3>
 
                       <div className="rating">
@@ -1590,12 +1814,14 @@ function App() {
 
                         <div>
 
-                          <strong>
-                            ₹
-                            {formatPrice(
-                              product.price
-                            )}
-                          </strong>
+                          {dealsByProductId.has(product.id) ? (
+                            <>
+                              <strong>₹{formatPrice(dealsByProductId.get(product.id).discountedPrice)}</strong>
+                              <del>₹{formatPrice(dealsByProductId.get(product.id).originalPrice)}</del>
+                            </>
+                          ) : (
+                            <strong>₹{formatPrice(product.price)}</strong>
+                          )}
 
                         </div>
 
@@ -1604,11 +1830,7 @@ function App() {
                           className="add-cart"
                           title="Add to cart"
 
-                          onClick={() =>
-                            addToCart(
-                              product
-                            )
-                          }
+                          onClick={() => addToCart(product)}
                         >
                           +
                         </button>
@@ -1630,16 +1852,14 @@ function App() {
 
         {!loading &&
           !error &&
-          products.length === 0 && (
+          filteredProducts.length === 0 && (
 
             <div className="products-message">
 
-              <h3>
-                No products found
-              </h3>
+              <h3>No matching products</h3>
 
               <p>
-                No products are currently available.
+                "Try another category or search term."
               </p>
 
               <button
@@ -1682,16 +1902,7 @@ function App() {
 
           <button
             type="button"
-
-            onClick={() => {
-              document
-                .querySelector(
-                  ".main-content"
-                )
-                ?.scrollIntoView({
-                  behavior: "smooth",
-                });
-            }}
+            onClick={showDeals}
           >
             Shop Deals →
           </button>
@@ -1866,7 +2077,13 @@ function App() {
                           key={item.id}
                         >
 
-                          <div className="cart-item-image">
+                          <button
+                            type="button"
+                            className="cart-item-image cart-quick-view-trigger"
+                            onClick={() => product && openProductQuickView(product)}
+                            disabled={!product}
+                            aria-label={`View ${product?.name || "product"} details`}
+                          >
 
                             {product?.image ? (
 
@@ -1893,13 +2110,19 @@ function App() {
 
                             )}
 
-                          </div>
+                          </button>
 
                           <div className="cart-item-info">
 
                             <h3>
-                              {product?.name ||
-                                `Product #${item.productId}`}
+                              <button
+                                type="button"
+                                className="cart-item-name-trigger"
+                                onClick={() => product && openProductQuickView(product)}
+                                disabled={!product}
+                              >
+                                {product?.name || `Product #${item.productId}`}
+                              </button>
                             </h3>
 
                             <p>
@@ -2082,6 +2305,95 @@ function App() {
 
         </div>
 
+      )}
+
+      {quickViewProduct && (
+        <div
+          className="product-quick-view-overlay"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              closeProductQuickView();
+            }
+          }}
+        >
+          <section
+            className="product-quick-view-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="quick-view-title"
+          >
+            <button
+              type="button"
+              className="product-quick-view-close"
+              onClick={closeProductQuickView}
+              aria-label="Close product details"
+            >
+              ✕
+            </button>
+
+            <ProductImageGallery
+              key={quickViewProduct.id}
+              images={quickViewImages}
+              productName={quickViewProduct.name}
+            />
+
+            <div className="product-quick-view-details">
+              <span className="product-quick-view-category">
+                {quickViewProduct.category || "SHOPVIA PRODUCT"}
+              </span>
+              <h2 id="quick-view-title">{quickViewProduct.name}</h2>
+              <p className="product-quick-view-description">
+                {quickViewProduct.description || "A great choice from the SHOPVIA collection."}
+              </p>
+              <p className="product-quick-view-stock">
+                {Number.isFinite(quickViewStock)
+                  ? quickViewStock > 0
+                    ? `${quickViewStock} in stock`
+                    : "Currently out of stock"
+                  : "Check availability at checkout"}
+              </p>
+
+              <div className="product-quick-view-price">
+                <strong>
+                  ₹{formatPrice(quickViewDeal?.discountedPrice ?? quickViewProduct.price)}
+                </strong>
+                {quickViewDeal && (
+                  <del>₹{formatPrice(quickViewDeal.originalPrice)}</del>
+                )}
+              </div>
+
+              <div className="product-quick-view-actions">
+                <div className="quantity-control quick-view-quantity">
+                  <button
+                    type="button"
+                    onClick={() => setQuickViewQuantity((quantity) => Math.max(1, quantity - 1))}
+                    disabled={quickViewQuantity <= 1}
+                    aria-label="Decrease quantity"
+                  >
+                    −
+                  </button>
+                  <span aria-live="polite">{quickViewQuantity}</span>
+                  <button
+                    type="button"
+                    onClick={() => setQuickViewQuantity((quantity) => quantity + 1)}
+                    disabled={Number.isFinite(quickViewStock) && quickViewQuantity >= quickViewStock}
+                    aria-label="Increase quantity"
+                  >
+                    +
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="product-quick-view-add"
+                  onClick={addQuickViewProductToCart}
+                  disabled={quickViewAdding || (Number.isFinite(quickViewStock) && quickViewStock <= 0)}
+                >
+                  {quickViewAdding ? "Adding…" : "Add to cart"}
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
       )}
 
     </div>

@@ -1,5 +1,6 @@
 package com.example.demo.service;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
@@ -17,6 +18,7 @@ public class ProductService {
     }
 
     public Product addProduct(Product product) {
+        normalizeProductImages(product);
         return productRepository.save(product);
     }
 
@@ -39,7 +41,12 @@ public class ProductService {
             existingProduct.setPrice(product.getPrice());
             existingProduct.setQuantity(product.getQuantity());
             existingProduct.setCategory(product.getCategory());
-            existingProduct.setImage(product.getImage());
+            if ((product.getImages() != null && !product.getImages().isEmpty())
+                    || (product.getImage() != null && !product.getImage().isBlank())) {
+                normalizeProductImages(product);
+                existingProduct.setImages(product.getImages());
+                existingProduct.setImage(product.getImage());
+            }
 
             return productRepository.save(existingProduct);
         }
@@ -49,5 +56,22 @@ public class ProductService {
 
     public void deleteProduct(Long id) {
         productRepository.deleteById(id);
+    }
+
+    private void normalizeProductImages(Product product) {
+        List<String> images = product.getImages() == null
+                ? new ArrayList<>()
+                : product.getImages().stream()
+                        .filter(image -> image != null && !image.isBlank())
+                        .map(String::trim)
+                        .distinct()
+                        .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+
+        if (images.isEmpty() && product.getImage() != null && !product.getImage().isBlank()) {
+            images.add(product.getImage().trim());
+        }
+
+        product.setImages(images);
+        product.setImage(images.isEmpty() ? null : images.get(0));
     }
 }

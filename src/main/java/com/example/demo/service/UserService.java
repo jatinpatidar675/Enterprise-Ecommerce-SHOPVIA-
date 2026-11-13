@@ -25,87 +25,78 @@ public class UserService {
     // =========================================
     // REGISTER USER
     // =========================================
-
     public User registerUser(User user) {
 
         if (user == null) {
             throw new RuntimeException(
-                "User data is required"
+                    "User data is required"
             );
         }
 
-        if (user.getName() == null ||
-            user.getName().trim().isEmpty()) {
+        if (user.getName() == null
+                || user.getName().trim().isEmpty()) {
 
             throw new RuntimeException(
-                "Name is required"
+                    "Name is required"
             );
         }
 
-        if (user.getEmail() == null ||
-            user.getEmail().trim().isEmpty()) {
+        if (user.getEmail() == null
+                || user.getEmail().trim().isEmpty()) {
 
             throw new RuntimeException(
-                "Email is required"
+                    "Email is required"
             );
         }
 
-        if (user.getPassword() == null ||
-            user.getPassword().isEmpty()) {
+        if (user.getPassword() == null
+                || user.getPassword().isEmpty()) {
 
             throw new RuntimeException(
-                "Password is required"
+                    "Password is required"
             );
         }
 
-        if (user.getPhone() == null ||
-            user.getPhone().trim().isEmpty()) {
+        if (user.getPhone() == null
+                || user.getPhone().trim().isEmpty()) {
 
             throw new RuntimeException(
-                "Phone is required"
+                    "Phone is required"
             );
         }
 
-        String email =
-            user.getEmail().trim().toLowerCase();
+        String email
+                = user.getEmail().trim().toLowerCase();
 
         // Check duplicate email
-
-        User existingUser =
-            userRepository.findByEmail(email);
+        User existingUser
+                = userRepository.findByEmail(email);
 
         if (existingUser != null) {
 
             throw new RuntimeException(
-                "An account with this email already exists."
+                    "An account with this email already exists."
             );
         }
 
         user.setName(
-            user.getName().trim()
+                user.getName().trim()
         );
 
         user.setEmail(email);
 
         user.setPhone(
-            user.getPhone().trim()
+                user.getPhone().trim()
         );
 
         // Encrypt password
-
         user.setPassword(
-            passwordEncoder.encode(
-                user.getPassword()
-            )
+                passwordEncoder.encode(
+                        user.getPassword()
+                )
         );
 
-        // Default role
-
-        if (user.getRole() == null ||
-            user.getRole().trim().isEmpty()) {
-
-            user.setRole("USER");
-        }
+        user.setRole("USER");
 
         return userRepository.save(user);
     }
@@ -113,38 +104,35 @@ public class UserService {
     // =========================================
     // FIND USER BY ID
     // =========================================
-
     public User getUserById(Long id) {
 
         return userRepository.findById(id)
-                .orElseThrow(() ->
-                    new RuntimeException(
+                .orElseThrow(()
+                        -> new RuntimeException(
                         "User not found with ID: " + id
-                    )
+                )
                 );
     }
 
     // =========================================
     // FIND USER BY EMAIL
     // =========================================
-
     public User findByEmail(String email) {
 
-        if (email == null ||
-            email.trim().isEmpty()) {
+        if (email == null
+                || email.trim().isEmpty()) {
 
             return null;
         }
 
         return userRepository.findByEmail(
-            email.trim().toLowerCase()
+                email.trim().toLowerCase()
         );
     }
 
     // =========================================
     // GET ALL USERS
     // =========================================
-
     public List<User> getAllUsers() {
 
         return userRepository.findAll();
@@ -153,7 +141,6 @@ public class UserService {
     // =========================================
     // DELETE USER
     // =========================================
-
     public void deleteUser(Long id) {
 
         userRepository.deleteById(id);
@@ -162,20 +149,19 @@ public class UserService {
     // =========================================
     // CHECK PASSWORD
     // =========================================
-
     public boolean checkPassword(
             String rawPassword,
             String encodedPassword) {
 
-        if (rawPassword == null ||
-            encodedPassword == null) {
+        if (rawPassword == null
+                || encodedPassword == null) {
 
             return false;
         }
 
         return passwordEncoder.matches(
-            rawPassword,
-            encodedPassword
+                rawPassword,
+                encodedPassword
         );
     }
 }

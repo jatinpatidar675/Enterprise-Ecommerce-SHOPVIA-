@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.example.demo.entity.User;
+import com.example.demo.service.CurrentUserAccessService;
 import com.example.demo.service.UserService;
 
 @RestController
@@ -22,18 +23,20 @@ import com.example.demo.service.UserService;
 public class UserController {
 
     private final UserService userService;
+    private final CurrentUserAccessService currentUserAccessService;
 
     public UserController(
-            UserService userService) {
+            UserService userService,
+            CurrentUserAccessService currentUserAccessService) {
 
         this.userService = userService;
+        this.currentUserAccessService = currentUserAccessService;
     }
 
     // =========================================
     // REGISTER USER
     // POST /api/users/register
     // =========================================
-
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
     public User registerUser(
@@ -46,11 +49,11 @@ public class UserController {
     // GET USER BY ID
     // GET /api/users/{id}
     // =========================================
-
     @GetMapping("/{id}")
     public User getUserById(
             @PathVariable Long id) {
 
+        currentUserAccessService.requireOwnerOrAdmin(id);
         return userService.getUserById(id);
     }
 
@@ -58,7 +61,6 @@ public class UserController {
     // GET USER BY EMAIL
     // GET /api/users/email/{email}
     // =========================================
-
     @GetMapping("/email/{email}")
     public User getUserByEmail(
             @PathVariable String email) {
@@ -70,7 +72,6 @@ public class UserController {
     // GET ALL USERS
     // GET /api/users
     // =========================================
-
     @GetMapping
     public List<User> getAllUsers() {
 
@@ -81,7 +82,6 @@ public class UserController {
     // DELETE USER
     // DELETE /api/users/{id}
     // =========================================
-
     @DeleteMapping("/{id}")
     public String deleteUser(
             @PathVariable Long id) {

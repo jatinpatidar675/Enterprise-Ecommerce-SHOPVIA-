@@ -1,4 +1,3 @@
-
 package com.example.demo.service;
 
 import java.util.List;
@@ -15,18 +14,20 @@ public class CartService {
 
     private final CartRepository cartRepository;
     private final ProductRepository productRepository;
+    private final DealService dealService;
 
     public CartService(CartRepository cartRepository,
-                       ProductRepository productRepository) {
+            ProductRepository productRepository,
+            DealService dealService) {
 
         this.cartRepository = cartRepository;
         this.productRepository = productRepository;
+        this.dealService = dealService;
     }
 
     // =========================
     // ADD PRODUCT TO CART
     // =========================
-
     public Cart addToCart(Cart cart) {
 
         Product product = productRepository.findById(cart.getProductId())
@@ -39,16 +40,16 @@ public class CartService {
         }
 
         // Check if product already exists in user's cart
-        List<Cart> existingCartItems =
-                cartRepository.findByUserId(cart.getUserId());
+        List<Cart> existingCartItems
+                = cartRepository.findByUserId(cart.getUserId());
 
         for (Cart existingCart : existingCartItems) {
 
             if (existingCart.getProductId()
                     .equals(cart.getProductId())) {
 
-                int totalQuantity =
-                        existingCart.getQuantity()
+                int totalQuantity
+                        = existingCart.getQuantity()
                         + cart.getQuantity();
 
                 if (totalQuantity > product.getQuantity()) {
@@ -62,7 +63,7 @@ public class CartService {
                 existingCart.setQuantity(totalQuantity);
 
                 // Always take latest price from Product
-                existingCart.setPrice(product.getPrice());
+                existingCart.setPrice(dealService.getCurrentPrice(product.getId(), product.getPrice()).doubleValue());
 
                 return cartRepository.save(existingCart);
             }
@@ -78,7 +79,7 @@ public class CartService {
         }
 
         // Always take price from Product database
-        cart.setPrice(product.getPrice());
+        cart.setPrice(dealService.getCurrentPrice(product.getId(), product.getPrice()).doubleValue());
 
         return cartRepository.save(cart);
     }
@@ -86,22 +87,19 @@ public class CartService {
     // =========================
     // GET USER CART
     // =========================
-
     public List<Cart> getCartByUser(Long userId) {
-
-        return cartRepository.findByUserId(userId);
+        List<Cart> items = cartRepository.findByUserId(userId);
+        items.forEach(item -> productRepository.findById(item.getProductId()).ifPresent(product
+                -> item.setPrice(dealService.getCurrentPrice(product.getId(), product.getPrice()).doubleValue())));
+        return items;
     }
 
     // =========================
     // UPDATE CART QUANTITY
     // =========================
-
     public Cart updateQuantity(Long id, int quantity) {
 
-        Cart cart = cartRepository.findById(id)
-                .orElseThrow(() ->
-                        new RuntimeException("Cart item not found")
-                );
+        Cart cart = getCartById(id);
 
         if (quantity <= 0) {
 
@@ -111,8 +109,8 @@ public class CartService {
         }
 
         Product product = productRepository.findById(cart.getProductId())
-                .orElseThrow(() ->
-                        new RuntimeException("Product not found")
+                .orElseThrow(()
+                        -> new RuntimeException("Product not found")
                 );
 
         if (quantity > product.getQuantity()) {
@@ -126,7 +124,7 @@ public class CartService {
         cart.setQuantity(quantity);
 
         // Update price from Product database
-        cart.setPrice(product.getPrice());
+        cart.setPrice(dealService.getCurrentPrice(product.getId(), product.getPrice()).doubleValue());
 
         return cartRepository.save(cart);
     }
@@ -134,9 +132,15 @@ public class CartService {
     // =========================
     // REMOVE FROM CART
     // =========================
-
     public void removeFromCart(Long id) {
 
         cartRepository.deleteById(id);
+    }
+
+    public Cart getCartById(Long id) {
+        return cartRepository.findById(id)
+                .orElseThrow(()
+                        -> new RuntimeException("Cart item not found")
+                );
     }
 }

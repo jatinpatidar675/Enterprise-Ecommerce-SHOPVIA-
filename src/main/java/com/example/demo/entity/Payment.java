@@ -12,6 +12,8 @@ public class Payment {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    private Long userId;
+
     private Long orderId;
 
     private double amount;
@@ -22,13 +24,20 @@ public class Payment {
 
     private LocalDateTime paymentDate;
 
+    private String razorpayOrderId;
+
+    private String razorpayPaymentId;
+
+    private String razorpaySignature;
+
     public Payment() {
     }
 
-    public Payment(Long orderId, double amount,
+    public Payment(Long userId, Long orderId, double amount,
                    String paymentMethod, String status,
                    LocalDateTime paymentDate) {
 
+        this.userId = userId;
         this.orderId = orderId;
         this.amount = amount;
         this.paymentMethod = paymentMethod;
@@ -42,6 +51,14 @@ public class Payment {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public Long getUserId() {
+        return userId;
+    }
+
+    public void setUserId(Long userId) {
+        this.userId = userId;
     }
 
     public Long getOrderId() {
@@ -82,5 +99,29 @@ public class Payment {
 
     public void setPaymentDate(LocalDateTime paymentDate) {
         this.paymentDate = paymentDate;
+    }
+
+    public String getRazorpayOrderId() {
+        return razorpayOrderId;
+    }
+
+    public void setRazorpayOrderId(String razorpayOrderId) {
+        this.razorpayOrderId = razorpayOrderId;
+    }
+
+    public String getRazorpayPaymentId() {
+        return razorpayPaymentId;
+    }
+
+    public void setRazorpayPaymentId(String razorpayPaymentId) {
+        this.razorpayPaymentId = razorpayPaymentId;
+    }
+
+    public String getRazorpaySignature() {
+        return razorpaySignature;
+    }
+
+    public void setRazorpaySignature(String razorpaySignature) {
+        this.razorpaySignature = razorpaySignature;
     }
 }

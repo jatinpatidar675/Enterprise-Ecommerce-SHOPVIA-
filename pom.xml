@@ -93,6 +93,13 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- Isolated in-memory database for tests -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>test</scope>
+        </dependency>
+
         <!-- Test: Security -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -112,6 +119,13 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc-test</artifactId>
             <scope>test</scope>
+        </dependency>
+
+        <!-- Razorpay -->
+        <dependency>
+            <groupId>com.razorpay</groupId>
+            <artifactId>razorpay-java</artifactId>
+            <version>1.4.5</version>
         </dependency>
 
     </dependencies>

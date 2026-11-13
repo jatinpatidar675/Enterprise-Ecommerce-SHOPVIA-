@@ -1,7 +1,17 @@
 import axios from "axios";
 
+export const API_ORIGIN = (import.meta.env.VITE_API_ORIGIN || "http://localhost:8080")
+  .replace(/\/+$/, "");
+
+export const getProductImageUrl = (image) => {
+  if (!image) return null;
+  const value = String(image).trim();
+  if (/^https?:\/\//i.test(value)) return value;
+  return `${API_ORIGIN}/images/${value.replace(/^\/+/, "").replace(/^images\//i, "")}`;
+};
+
 const API = axios.create({
-  baseURL: "http://localhost:8080/api",
+  baseURL: `${API_ORIGIN}/api`,
   headers: {
     "Content-Type": "application/json",
   },
